@@ -1,0 +1,185 @@
+/*
+ * @Author: wangqs 
+ * @Date: 2024-01-25 15:37:01 
+ * @Last Modified by: wangqs
+ * @Last Modified time: 2024-01-25 15:37:53
+ */
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta HTTP-EQUIV="pragma" CONTENT="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Cache-control" content="no-cache">
+    <meta http-equiv="Cache" content="no-cache">
+    <meta name="referrer" content="no-referrer" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>协议预览</title>
+  </head>
+  <body>
+    <noscript>
+      <strong
+        >We're sorry but SCRM doesn't work properly without JavaScript
+        enabled. Please enable it to continue.</strong
+      >
+    </noscript>
+    <style>
+      .content-box {
+        padding-top: 20px;
+        -webkit-overflow-scrolling: touch;
+        overflow-y: scroll;
+        position: absolute;
+        top: 0;
+        right: 0;
+        left: 0;
+        bottom: 0;
+      }
+      .content-box canvas {
+        position: absolute;
+        bottom: 0;
+        height: 100%;
+        width: 100%;
+        left: -2000px;
+        top: 0;
+      }
+      .content-box img {
+        width: 100%;
+        height: auto;
+        margin-bottom: 10px;
+        display: block;
+      }
+    </style>
+    <div id="app">
+      <div class="content-box box" id="content-box">
+        <canvas
+          id="pdf-canvas"
+          canvas-id="pdf-canvas"
+        ></canvas>
+      </div>
+    </div>
+    <script>
+      // 参数 pdfUrl title
+      var vm = {
+        imgs: [],
+        pageNum: 1,
+        pdf: null,
+        show: false,
+        code: '',
+      }
+      function getQueryString(name) {
+        var reg = new RegExp("(^|&)" + name + "=([^&]*)(&|$)", "i");
+        var r = window.location.search.substr(1).match(reg);
+        if (r != null) return decodeURI(r[2]);
+        return null;
+      };
+      var pdfUrl = decodeURIComponent(getQueryString('pdfurl') || '')
+      document.title = getQueryString('title') || '协议预览';
+      // console.log(getQueryString('pdfurl'), 'pdfurl')
+      function loadPdf (pdf) {
+        try {
+          let scale = 2 // 页面内容比例
+          if (vm.pageNum <= pdf.numPages) {
+            pdf.getPage(vm.pageNum).then(page => { // 得到 PDF 文件的第一页
+              try {
+                let canvas = document.getElementById('pdf-canvas')
+                var viewport = page.getViewport({ scale }) // 根据 PDF 页面信息得到视图
+                var context = canvas.getContext('2d') // 指定 canvas 画布按 2D 方式渲染
+                console.log(canvas, 'ccc')
+                // 设定画布大小
+                canvas.height = viewport.height
+                canvas.width = viewport.width
+                // 设定渲染参数
+                var renderContext = {
+                  canvasContext: context,
+                  viewport: viewport
+                }
+
+                // 渲染页面
+                let renderTask = page.render(renderContext)
+                renderTask.promise.then(() => {
+                  let ctx = canvas.getContext('2d')
+                  // 自己想加点文字水印可以在这里添加
+                  // drawImg()
+                  let base64Img = canvas.toDataURL()
+                  vm.imgs.push(base64Img)
+                  let contentBox = document.getElementById('content-box')
+                  let oImg = document.createElement('img')
+                  oImg.src = base64Img
+                  contentBox.appendChild(oImg)
+                  ctx.clearRect(0, 0, canvas.height, canvas.height)
+                  vm.pageNum++
+                  loadPdf(pdf)
+                })
+              } catch (e) {
+                console.log(e)
+              }
+            })
+          } else {
+            console.log(vm.imgs, 'imgs')
+          }
+        } catch (e) {
+        }
+      };
+
+      async function getPdfjs () {
+        return new Promise((resolve, reject) => {
+          let script = document.createElement('script')
+          script.type = 'text/javascript'
+          script.src = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.9.179/build/pdf.min.js'
+          script.onload = () => {
+            resolve(pdfjsLib)
+          }
+          script.onerror = () => {
+            console.log('失败')
+            reject()
+          }
+          document.head.appendChild(script)
+        })
+      };
+      function getContent () {
+        // pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://img.tjerong.com/js/pdf.worker.min.js'
+        // https://unpkg.com/browse/pdfjs-dist@2.0.943/build/pdf.worker.min.js
+        // https://cdn-order-test.dustess.com/W00000000109/order/l/6/t/u/l6tuhkv5m3o1687864425431.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.9.179/build/pdf.worker.min.js'
+        if (pdfUrl) {
+          pdfjsLib.getDocument({
+            url: pdfUrl || 'https://cdn-order-test.dustess.com/W00000000109/order/g/l/m/g/glmgdex09jt1687857905547.pdf', // 此参数需要设为true
+            // cMapUrl: 'https://img.tjerong.com/cmaps/', // 解决水印及相关字体渲染问题
+            cMapPacked: true
+          }).promise.then(pdf => {
+            console.log(pdf, 'pdf')
+            vm.pdf = pdf
+            loadPdf(pdf)
+          }).catch(() => {
+            // this.$toast.fail('文件地址请求失败')
+            console.log('文件地址请求失败')
+          })
+        } else {
+          console.error('未获取到地址')
+        }
+      }
+      // 自定义添加文字水印
+      function drawImg () {
+        let canvas = document.getElementById('pdf-canvas')
+        let ctx = canvas.getContext('2d')
+        var text = 'test wqs viewer'
+        ctx.globalAlpha = 0.3
+        ctx.font = '46px 黑体'
+        ctx.rotate(-20 * Math.PI / 180)
+        ctx.fillStyle = 'rgba(12,100,100,0.4)'
+        ctx.rotate('Math.PI/60')
+        for (let i of [1, 2, 3, 4, 5, 6, 7, 8]) {
+          ctx.fillText(text, i * 10, i * 200);
+          // ctx.fillText(text, -300 - i * 1, i * 200 + 50)
+          // ctx.fillText(text, 300 + i * 1, i * 200 + 100)
+        }
+      };
+
+      getPdfjs().then(() => {
+        getContent()
+      })
+    </script>
+  </body>
+</html>
